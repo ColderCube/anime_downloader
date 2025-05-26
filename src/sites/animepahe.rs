@@ -28,7 +28,7 @@ pub struct AnimePahe {
 impl AnimePahe {
     pub fn new() -> Result<Self, AnimeDownloaderError> {
         let cookie_store = {
-            let file = match std::fs::File::open("E:\\Projects\\anime_downloader\\cookies.json")
+            let file = match std::fs::File::open("cookies.json")
                 .map(std::io::BufReader::new)
             {
                 Ok(reader) => reader,
