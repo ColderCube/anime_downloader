@@ -26,11 +26,10 @@ jobs:
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       release_version: ${{ env.RELEASE_VERSION }}
-      is_prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }} # Output for potential future use
+      is_prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }}
     steps:
       - name: Get release version from tag
         run: |
-          # GITHUB_REF_NAME contains the tag name (e.g., "v1.2.3" or "v1.2.3-beta.1")
           echo "RELEASE_VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
           echo "Version is: ${{ env.RELEASE_VERSION }}"
 
@@ -39,12 +38,10 @@ jobs:
         shell: bash
         run: |
           IS_PRERELEASE="false"
-          # Check if RELEASE_VERSION contains a hyphen, indicating a prerelease suffix
           if [[ "${{ env.RELEASE_VERSION }}" == *'-'* ]]; then
             IS_PRERELEASE="true"
           fi
           echo "Current version (${{ env.RELEASE_VERSION }}) is prerelease: $IS_PRERELEASE"
-          # Set step output for the create_release step
           echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
         env:
           RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
@@ -57,24 +54,21 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_VERSION }}
           name: ${{ env.RELEASE_VERSION }}
-          draft: false # Set to true to create a draft release
-          prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }} # Dynamically set based on tag
+          draft: false
+          prerelease: ${{ steps.check_prerelease.outputs.is_prerelease }}
 
   build-release:
     name: build-release
-    needs: ['create-release'] # Ensures this job runs only after create-release is successful
+    needs: ['create-release']
     runs-on: ${{ matrix.os }}
     env:
       CARGO: cargo
       TARGET_DIR: ./target
-      # **IMPORTANT**: Update this if your project's binary has a different name.
-      # This is the name of the executable file itself.
       BINARY_NAME: anime
-      # This is used for the archive name prefix.
       ARCHIVE_NAME_PREFIX: anime-downloader
     strategy:
       matrix:
-        build: [linux, macos, win-msvc, win-gnu]
+        build: [linux, macos, win-msvc]
         include:
           - build: linux
             os: ubuntu-latest
@@ -88,95 +82,82 @@ jobs:
             os: windows-latest
             rust: stable
             target: x86_64-pc-windows-msvc
-          - build: win-gnu
-            os: windows-latest
-            rust: stable-x86_64-gnu # Toolchain spec for MinGW
-            target: x86_64-pc-windows-gnu
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1 # Fetches only the latest commit.
+          fetch-depth: 1
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ matrix.rust }}
-          targets: ${{ matrix.target }} # Add target for cross-compilation
-          profile: minimal # Installs only the Rust compiler and Cargo.
+          targets: ${{ matrix.target }}
+          profile: minimal
+
+      - name: Install MUSL tools (for Linux MUSL target)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y musl-tools
+        shell: bash
 
       - name: Set release version and upload URL from job outputs
         shell: bash
         run: |
           RELEASE_VERSION_VAL="${{ needs.create-release.outputs.release_version }}"
           RELEASE_UPLOAD_URL_VAL="${{ needs.create-release.outputs.upload_url }}"
-          # Set environment variables for subsequent steps in this job
           echo "RELEASE_VERSION=$RELEASE_VERSION_VAL" >> $GITHUB_ENV
           echo "RELEASE_UPLOAD_URL=$RELEASE_UPLOAD_URL_VAL" >> $GITHUB_ENV
           echo "Release Version: $RELEASE_VERSION_VAL"
           echo "Release Upload URL: $RELEASE_UPLOAD_URL_VAL"
       
       - name: Build release binary
-        # Builds the binary for the specified target.
-        # Output will be in ${{ env.TARGET_DIR }}/${{ matrix.target }}/release/
         run: ${{ env.CARGO }} build --release --all-features --target ${{ matrix.target }}
 
       - name: Build archive
-        shell: bash # Ensures consistent scripting environment (Git Bash on Windows)
+        shell: bash
         run: |
-          # Define the path to the compiled binary.
-          # Cargo places target-specific builds in target/<TARGET_TRIPLE>/release/
           binary_source_path="${{ env.TARGET_DIR }}/${{ matrix.target }}/release/${{ env.BINARY_NAME }}"
-          # Define the name of the binary as it will appear in the archive
           binary_in_archive_name="${{ env.BINARY_NAME }}"
 
-          # Adjust for Windows .exe extension
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             binary_source_path="${binary_source_path}.exe"
             binary_in_archive_name="${binary_in_archive_name}.exe"
           fi
 
-          # Sanity check that the binary exists
           if [ ! -f "$binary_source_path" ]; then
             echo "Error: Binary not found at $binary_source_path"
-            # Useful for debugging: list contents of the expected release directory
             echo "Listing contents of ${{ env.TARGET_DIR }}/${{ matrix.target }}/release/:"
             ls -R "${{ env.TARGET_DIR }}/${{ matrix.target }}/release/"
             exit 1
           fi
 
-          # Create a staging directory for the archive contents
-          # Uses ARCHIVE_NAME_PREFIX for the directory and archive name
           staging_dir="${{ env.ARCHIVE_NAME_PREFIX }}-${{ env.RELEASE_VERSION }}-${{ matrix.target }}"
           mkdir -p "$staging_dir"
           echo "Staging directory: $staging_dir"
 
-          # Copy essential files into the staging directory if they exist
-          # Assumes these files are at the root of the repository
           echo "Copying additional files..."
           if [ -f "README.md" ]; then cp README.md "$staging_dir/"; echo "Copied README.md"; fi
           if [ -f "LICENSE" ]; then cp LICENSE "$staging_dir/"; echo "Copied LICENSE"; fi
           if [ -f "cookies.json" ]; then cp cookies.json "$staging_dir/"; echo "Copied cookies.json"; fi
           if [ -f "data.json" ]; then cp data.json "$staging_dir/"; echo "Copied data.json"; fi
           
-          # Copy the built binary into the staging directory
           echo "Copying binary from $binary_source_path to $staging_dir/$binary_in_archive_name"
           cp "$binary_source_path" "$staging_dir/$binary_in_archive_name"
 
-          # Create the archive (zip for Windows, tar.gz for others)
           archive_name=""
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             archive_name="$staging_dir.zip"
             echo "Creating zip archive: $archive_name"
-            7z a "$archive_name" "./$staging_dir/" # Use 7z for zip archives
+            7z a "$archive_name" "./$staging_dir/"
           else
             archive_name="$staging_dir.tar.gz"
             echo "Creating tar.gz archive: $archive_name"
-            tar czf "$archive_name" "$staging_dir/" # Use tar for gzipped tarballs
+            tar czf "$archive_name" "$staging_dir/"
           fi
           
-          # Set the ASSET environment variable for the upload step
           echo "ASSET=$archive_name" >> $GITHUB_ENV
           echo "Packaged asset: $archive_name"
 
@@ -184,8 +165,8 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          upload_url: ${{ env.RELEASE_UPLOAD_URL }} # Provided by the create-release job's output
-          tag: ${{ env.RELEASE_VERSION }} # Also provide the tag for robustness
-          file: ${{ env.ASSET }} # Path to the asset to upload (set in previous step)
-          asset_name: ${{ env.ASSET }} # Name of the asset on GitHub Releases
-          overwrite: true # Replace asset if it already exists
+          upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+          tag: ${{ env.RELEASE_VERSION }}
+          file: ${{ env.ASSET }}
+          asset_name: ${{ env.ASSET }}
+          overwrite: true
