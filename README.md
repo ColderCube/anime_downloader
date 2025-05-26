@@ -26,7 +26,7 @@ A command-line tool written in Rust for downloading anime episodes from various 
 2. Extract the binary to a location of your choice
 3. Run the program:
 ```bash
-./anime_downloader
+./anime
 ```
 
 ### Building from Source
