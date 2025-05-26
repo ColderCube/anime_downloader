@@ -1,0 +1,38 @@
+[package]
+name = "anime_downloader"
+description = "A simple but powerful anime downloader."
+version = "0.1.0"
+authors = ["ColderCube"]
+autobins = false
+license = "MIT"
+edition = "2021"
+
+[[bin]]
+name = "anime"
+path = "src/main.rs"
+
+[dependencies]
+aria2-rs = "0.3.1"
+async-trait = "0.1.88"
+clearscreen = { version = "4.0.1", features = ["windows-console"] }
+cookie_store = "0.21.1"
+futures = "0.3.31"
+regex = { version = "1.11.1", features = ["perf-dfa-full"] }
+reqwest = { version = "0.12.15", features = ["gzip", "cookies", "rustls-tls"] }
+reqwest-middleware = { version = "0.4.2", features = ["http2", "json", "rustls-tls"] }
+reqwest-retry = { version = "0.7.0", features = ["tracing"] }
+reqwest_cookie_store = "0.8.0"
+scraper = "0.23.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+tokio = { version = "1.45.0", features = ["full"] }
+
+
+[profile.dev]
+opt-level = 1
+codegen-units = 4
+
+[profile.release]
+opt-level = 3
+strip = "debuginfo"
+codegen-units = 1
