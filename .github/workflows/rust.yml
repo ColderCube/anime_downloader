@@ -17,7 +17,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-2019, macOS-latest]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
         rust: [stable, nightly]
         # Allow failures on nightly, it's just informative
         include:
